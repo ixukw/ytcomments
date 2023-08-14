@@ -1,0 +1,22 @@
+.App {
+  margin: 0 1% 1% 1%;
+}
+.header {
+  display: flex;
+  flex-direction: column;
+  justify-content: left;
+}
+.main-content {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+}
+.content-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.queue {
+  margin-left: 5%;
+}
