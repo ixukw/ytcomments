@@ -4,10 +4,11 @@ import Video from './components/video';
 
 function App() {
   const [playlistID, setPlaylistID] = useState(null);
-  const [apiKey, setAPIKey] = useState("");
+  const [apiKey, setAPIKey] = useState("AIzaSyAtb3BRw01oW0bAKTSkNwKOFO-EfVhnq7U");
   const [videos, setVideos] = useState([]);
   const [outputJSON, setOutputJSON] = useState();
   const [videoIds, setVideoIds] = useState([]);
+  const [processed, setProcessed] = useState(null);
 
   async function getVideosFromPlaylist(id) {
     let videos = [];
@@ -91,7 +92,7 @@ function App() {
           videoId: id,
           part: 'snippet',
           pageToken: nextToken,
-          //maxResults: 50
+          maxResults: 50
         }));
 
         const data = await response.json();
@@ -121,12 +122,14 @@ function App() {
 
   // Fetch all top level comments from given video ID
   async function downloadSelected(ids) {
+    setOutputJSON(null);
     let jsonblock = [];
     for (const id of ids) {
       const output = await getCommentsFromVideo(id);
       console.log(id);
       console.log(output);
       jsonblock.push({'id':id,'comments':output});
+      setProcessed(id);
     }
     console.log(jsonblock);
     setOutputJSON(jsonblock); 
@@ -163,8 +166,8 @@ function App() {
       </div>
       {videos.length > 0 && <div className="main-content">
         <div className="queue">
-          <h3>Output</h3>
-            {outputJSON ? 'Ready!' : ''}
+          <h3>Status</h3>
+            {outputJSON ? 'Ready!' : processed ? `Current Video: ${videos.find(x => x.id === processed) ? videos.find(x => x.id === processed).snippet.title : 'unknown'}` : ''}
           </div>
         <div className="selected-list">
           <div className="content-header">
