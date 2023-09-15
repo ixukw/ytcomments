@@ -4,7 +4,7 @@ import Video from './components/video';
 
 function App() {
   const [playlistID, setPlaylistID] = useState(null);
-  const [apiKey, setAPIKey] = useState("AIzaSyAtb3BRw01oW0bAKTSkNwKOFO-EfVhnq7U");
+  const [apiKey, setAPIKey] = useState("");
   const [videos, setVideos] = useState([]);
   const [outputJSON, setOutputJSON] = useState();
   const [videoIds, setVideoIds] = useState([]);
