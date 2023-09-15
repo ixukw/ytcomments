@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React/*, { useState, useEffect, useRef }*/ from 'react';
 import './video.css';
 /**
  * 
@@ -11,7 +11,7 @@ import './video.css';
 function Video({ info }) {
 
     return (
-        <div className="video-component" id={info.id}>
+        <div className="video-component" id={info.id} key={info.id} >
             <input type="checkbox" value={info.id} defaultChecked="true"/>
             <div>
                 <strong>{info.title}</strong>

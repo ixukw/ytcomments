@@ -1,22 +1,18 @@
 .App {
   margin: 0 1% 1% 1%;
-}
-.header {
   display: flex;
-  flex-direction: column;
-  justify-content: left;
-}
-.main-content {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-}
-.content-header {
-  display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
+  flex-direction: column;
+  width:100%;
 }
 
-.queue {
-  margin-left: 5%;
+.main-content {
+
+}
+input[type="text"], button {
+  width: 100%;
+  padding: 5px;
+  margin: 5px 0 5px 0;
+  box-sizing: border-box;
 }

@@ -1,125 +1,125 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import './App.css';
 import Video from './components/video';
 
-const api_key = ""
-const playlist_id = "PLdaz-iqxKi8DqXpAl9zPt6-I3_p6T95pX"
-
 function App() {
   const [playlistID, setPlaylistID] = useState(null);
+  const [apiKey, setAPIKey] = useState("AIzaSyAtb3BRw01oW0bAKTSkNwKOFO-EfVhnq7U");
   const [videos, setVideos] = useState([]);
-  const [vidIds, setVidIds] = useState([]);
-  const [selected, setSelected] = useState([]);
-  const [progress, setProgress] = useState([]);
   const [outputJSON, setOutputJSON] = useState();
-  /*//const playlist_url = "https://www.youtube.com/playlist?list=PLdaz-iqxKi8DqXpAl9zPt6-I3_p6T95pX"
-  
-
-  let test = {};
-  fetch(`https://www.googleapis.com/youtube/v3/playlistItems?key=${api_key}&playlistId=${playlist_id}&part=snippet`)
-  .then(r => r.json()).then((data) => {
-    data.items.forEach((video) => {
-      //console.log(`Video: ${video.snippet.title}`)
-      test[video.snippet.title] = [];
-      fetch(`https://www.googleapis.com/youtube/v3/commentThreads?key=${api_key}&videoId=${video.snippet.resourceId.videoId}&part=snippet&textFormat=plainText`)
-      .then(r => r.json()).then((commentData) => {
-        commentData.items.forEach((commentThread) => {
-          let c = commentThread.snippet.topLevelComment.snippet.textOriginal;
-          test[video.snippet.title].push({c});
-        });
-
-        document.getElementById('test').innerHTML = JSON.stringify(test);
-      });
-    });
-  });*/
+  const [videoIds, setVideoIds] = useState([]);
 
   async function getVideosFromPlaylist(id) {
     let videos = [];
     let videoIds = [];
     let nextToken = "";
+    console.log("apikey: " + apiKey);
+    console.log("playlist id: " + id);
+
     do {
       const response = await fetch('https://www.googleapis.com/youtube/v3/playlistItems?' + new URLSearchParams({
-        key: api_key,
+        key: apiKey,
         playlistId: id,
+        maxResults: 50,
         part: 'snippet',
         pageToken: nextToken
       }));
 
-      const data = await response.json();
-      nextToken = data.nextPageToken;
-      
-      data.items.forEach((video) => {
-        videos.push({
-          id: video.snippet.resourceId.videoId,
-          snippet: video.snippet,
-          processing: null,
-          statistics: null
+      try {
+        const data = await response.json();
+        if (data.error) throw new Error(`${data.error.message}\nCode: ${data.error.code}`);
+        
+        data.items.forEach((video) => {
+          videos.push({
+            id: video.snippet.resourceId.videoId,
+            snippet: video.snippet,
+            processing: null,
+            statistics: null
+          });
+          videoIds.push(video.snippet.resourceId.videoId);
         });
-        videoIds.push(video.snippet.resourceId.videoId);
-      });
-    } while (nextToken != null);
+        console.log(videoIds);
 
+        // Handle query again if exists
+        if (!data.nextPageToken) break;
+        nextToken = data.nextPageToken;
+      } catch (err) {
+        console.log(err);
+        alert(err);
+      }
+    } while (nextToken);
+
+    // Get comment count of each video
     const stats = await getStatsFromVideoIds(videoIds);
-    stats.map(v => videos.find(x => x.id === v.id).statistics = v.statistics)
+    stats.map(v => videos.find(x => x.id === v.id).statistics = v.statistics);
 
     setVideos([...videos]);
-    setVidIds(videoIds);
     return [videos, videoIds];
   }
 
   async function getStatsFromVideoIds(ids) {
     let nextToken = "";
     let videoStats = [];
-    do {
-      const response = await fetch('https://youtube.googleapis.com/youtube/v3/videos?' + new URLSearchParams({
-        key: api_key,
-        id: ids,
-        part: 'statistics',
-        pageToken: nextToken
-      }));
+    for (let c=0; c*50<ids.length; c++) { // maximum results per query is 50
+      do {
+        const response = await fetch('https://youtube.googleapis.com/youtube/v3/videos?' + new URLSearchParams({
+          key: apiKey,
+          id: ids.slice(c*50, 50*(c+1)),
+          part: 'statistics',
+          pageToken: nextToken
+        }));
 
-      const data = await response.json();
-      nextToken = data.nextPageToken;
-      console.log(data);
-      data.items.forEach(v => videoStats.push(v));
-    } while (nextToken != null);
+        const data = await response.json();
+        data.items.forEach(v => videoStats.push(v));
 
+        if (!data.nextPageToken) break;
+        nextToken = data.nextPageToken;
+      } while (nextToken);
+    }
     return videoStats;
   }
 
   async function getCommentsFromVideo(id) {
     let comments = [];
     let nextToken = "";
-    let c = 0;
     let done = 0;
-    do {
-      const response = await fetch('https://www.googleapis.com/youtube/v3/commentThreads?' + new URLSearchParams({
-        key: api_key,
-        videoId: id,
-        part: 'snippet',
-        pageToken: nextToken,
-        //maxResults: 50
-      }));
 
-      const data = await response.json();
-      nextToken = data.nextPageToken;
-      data.items.forEach(comment => {
-        comments.push(comment.snippet.topLevelComment.snippet.textOriginal);//console.log([...log, comment.snippet.topLevelComment.snippet.textOriginal]);
-      });
-      done += data.pageInfo.totalResults * data.pageInfo.resultsPerPage;
-      console.log(`fetched ${done}`);
-      c++;
-    } while (nextToken != null && c < 10);
+    do {
+      try {
+        const response = await fetch('https://www.googleapis.com/youtube/v3/commentThreads?' + new URLSearchParams({
+          key: apiKey,
+          videoId: id,
+          part: 'snippet',
+          pageToken: nextToken,
+          //maxResults: 50
+        }));
+
+        const data = await response.json();
+        nextToken = data.nextPageToken;
+        data.items.forEach(comment => {
+          comments.push(comment.snippet.topLevelComment.snippet.textOriginal);//console.log([...log, comment.snippet.topLevelComment.snippet.textOriginal]);
+        });
+        done=comments.length;
+        console.log(`fetched ${done}`);
+      } catch (err) {
+        console.log(err);
+      }
+    } while (nextToken);
     return comments;
   }
 
   async function handleSubmit() {
-    //setPlaylistID('PLdaz-iqxKi8DqXpAl9zPt6-I3_p6T95pX');
-    const [vids, ids] = await getVideosFromPlaylist(playlist_id);
-    //getCommentsFromVideo(ids[0]);
-    downloadSelected(ids);
+    if (!playlistID || !apiKey) {
+      alert("Missing playlist ID or API key");
+      return;
+    }
+    const [vids, ids] = await getVideosFromPlaylist(playlistID);
+    console.log(vids);
+    setVideoIds(ids);
+    //downloadSelected(ids);
   }
 
+  // Fetch all top level comments from given video ID
   async function downloadSelected(ids) {
     let jsonblock = [];
     for (const id of ids) {
@@ -129,9 +129,10 @@ function App() {
       jsonblock.push({'id':id,'comments':output});
     }
     console.log(jsonblock);
-    setOutputJSON(jsonblock);
+    setOutputJSON(jsonblock); 
   }
 
+  // Opens the output JSON to another page
   function openRaw() {
     if (outputJSON) {
       let wnd = window.open("about:blank", "");
@@ -140,40 +141,46 @@ function App() {
       alert("Output is blank.");
     }
   }
+
   return (
     <div className="App">
       <div className="header">
-        <h2>Download YouTube Comments from Playlist as JSON</h2>
-        Playlist ID: <br/>
+        <h2>YouTube Comments from Playlist to JSON</h2>
         <div>
-          <input type="text" onChange={(e) => {setPlaylistID(e.target.value)}}/>
-          <button onClick={handleSubmit}>Go</button>
-          <button onClick={()=> {}}>Stop</button>
+          Playlist URL:
+          <input type="text" onChange={(e) => {setPlaylistID(e.target.value.substring(e.target.value.indexOf('?list=')+6))}
+          } placeholder="URL" spellCheck="false"/>
+        </div>
+        <div>
+          API Key: <input type="text" onChange={(e) => {setAPIKey(e.target.value)}} placeholder="API Key" spellCheck="false"/>
+        </div>
+        <div>
+          <button onClick={handleSubmit}>Get Videos</button>
+          {/*<button onClick={()=> {}}>Stop</button>*/}
           <button onClick={openRaw}>View Raw Output</button>
-          <button onClick={() => {}}>Login with Google</button>
+          {/*<button onClick={() => {}}>Login with Google</button>*/}
         </div>
       </div>
       {videos.length > 0 && <div className="main-content">
+        <div className="queue">
+          <h3>Output</h3>
+            {outputJSON ? 'Ready!' : ''}
+          </div>
         <div className="selected-list">
           <div className="content-header">
-            <h3>Found {videos.length} Videos:</h3>
+            
+            <h3>Found {videos.length} Videos</h3>
+            <input type="checkbox"/> deselect/select All
+            <button onClick={() => {downloadSelected(videoIds)}}>Get Comments</button>
           </div>
           <div>
             {
-              videos.map((vid, index) => <Video progressState={progress.index} info={{id: vid.id, title: vid.snippet.title, numComments: vid.statistics.commentCount}}/>)
+              videos.map((vid, index) => <Video /*progressState={progress.index}*/ info={{id: vid.id, title: vid.snippet.title, numComments: (vid.statistics ? vid.statistics.commentCount : 0)}}/>)
             }
           </div>
         </div>
-        <div className="queue">
-          <h3>Output</h3>
-            {
-              JSON.stringify(outputJSON)
-            }
-        </div>
+        
       </div>}
-      {videos.length <= 0 && playlistID &&
-        <h3>Loading...</h3>
-      }
     </div>
   );
 }
