@@ -3,3 +3,6 @@
     flex-direction: row;
     align-items: flex-start;
 }
+.video-component label, input[type=checkbox] {
+    cursor: pointer;
+}

@@ -2,6 +2,12 @@
 
 https://ixukw.github.io/ytcomments
 
+This currently doesn't work with private playlists or videos. The playlist and videos must be public/unlisted.
+
+## Note
+
+All of the core functionality for the API calls to get comments is in `App.js`. Everything else is for displaying information to the user.
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).

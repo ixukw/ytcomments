@@ -1,0 +1,10 @@
+.log-component {
+    height: 200px;
+    overflow-y: scroll;
+    overflow-wrap: break-word;
+    border: 1px solid black;
+    padding: 5px;
+    margin: 20px;
+    resize: vertical;
+    min-height: 200px;
+}
