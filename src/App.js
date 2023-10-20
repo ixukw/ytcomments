@@ -1,4 +1,5 @@
 import React, { useState, useReducer, useRef } from 'react';
+import JSZip from 'jszip';
 import './App.css';
 import VideoList from './components/VideoList/VideoList';
 import Help from './components/Help/Help';
@@ -9,11 +10,9 @@ function App() {
   const [playlistID, setPlaylistID] = useState(null);
   const [apiKey, setAPIKey] = useState(null);
   const [videos, setVideos] = useState([]);
-  const [outputData, setOutputData] = useState(null);
   const [videoIds, setVideoIds] = useState([]);
-  
-  const downloadRef = useRef();
   const [log, dispatch] = useReducer(logReducer, []);
+  const downloadRef = useRef();
 
   /**
    * Updates the history log
@@ -32,7 +31,7 @@ function App() {
    * Fetches all video information from the playlist.
    * 
    * @param {String} id 
-   * @returns {Object[]}
+   * @returns {Promise<Object[]>}
    */
   async function getVideosFromPlaylist(id) {
     let videos = [];
@@ -78,6 +77,7 @@ function App() {
     stats.map(v => videos.find(x => x.id === v.id).statistics = v.statistics);
 
     setVideos([...videos]);
+    updateLog(`Found ${videos.length} videos`);
     return [videos, videoIds];
   }
 
@@ -110,16 +110,61 @@ function App() {
     return videoStats;
   }
   
+  async function getRepliesFromComment(id) {
+    let comments = [];
+    let nextToken = "";
+    do {
+      try {
+        const response = await fetch('https://www.googleapis.com/youtube/v3/comments?' + new URLSearchParams({
+          key: apiKey,
+          parentId: id,
+          part: 'snippet',
+          pageToken: nextToken,
+          maxResults: 100
+        }));
+
+        const data = await response.json();
+        nextToken = data.nextPageToken;
+
+        if (data.items) {
+          await Promise.all(data.items.map(async reply => {
+            comments.push([
+              reply.id,                             // comment_id
+              'reply',                              // type
+              reply.snippet.parentId,               // parent_id
+              reply.snippet.authorDisplayName,      // author_display_name
+              reply.snippet.authorChannelId.value,  // author_id
+              reply.snippet.likeCount,              // like_count
+              0,                                    // reply_count (right now YT doesn't have nested replies)
+              reply.snippet.publishedAt,            // published_at
+              reply.snippet.updatedAt,              // updated_at
+              reply.snippet.textDisplay,            // comment
+            ]);
+          }));
+        }
+      } catch (err) {
+        alert(err);
+        updateLog(err);
+      }
+    } while (nextToken);
+
+    updateLog(`${comments.length} total replies for comment ${id}`);
+    return comments;
+  }
+
   /**
    * Fetches all comments from a given video ID
+   * 
+   * this function is quite messy right now
+   * 
    * @param {String} id 
-   * @returns {String[][]}
+   * @returns {Promise<String[][]>}
    */
   async function getCommentsFromVideo(id) {
     let comments = [];
     let nextToken = "";
     const vidName = videos.find(x => x.id === id).snippet.title;
-    updateLog(`Starting fetch for "${vidName}"`);
+    updateLog(`Begin fetch for "${vidName}"`);
 
     do {
       try {
@@ -134,12 +179,13 @@ function App() {
         const data = await response.json();
         nextToken = data.nextPageToken;
         
+        console.log(data);
         if (data.items) {
-          data.items.forEach(comment => {
+          await Promise.all(data.items.map(async comment => {
             // top-level comment
             comments.push([
               comment.id,                                                     // comment_id
-              'top',                                                          // type
+              'commentThread',                                                // type
               'N/A',                                                          // parent_id
               comment.snippet.topLevelComment.snippet.authorDisplayName,      // author_display_name
               comment.snippet.topLevelComment.snippet.authorChannelId.value,  // author_id
@@ -150,31 +196,38 @@ function App() {
               comment.snippet.topLevelComment.snippet.textDisplay,            // comment
             ]);
 
-            // comment replies
+            // reply comment - only refetch for comments with >5 replies to conserve api calls
             if (comment.replies) {
-              comment.replies.comments.forEach(reply => {
-                comments.push([
-                  reply.id,                             // comment_id
-                  'reply',                              // type
-                  reply.snippet.parentId,               // parent_id
-                  reply.snippet.authorDisplayName,      // author_display_name
-                  reply.snippet.authorChannelId.value,  // author_id
-                  reply.snippet.likeCount,              // like_count
-                  0,                                    // reply_count
-                  reply.snippet.publishedAt,            // published_at
-                  reply.snippet.updatedAt,              // updated_at
-                  reply.snippet.textDisplay,            // comment
-                ]);
-              });
+              if (comment.snippet.totalReplyCount > 5) {
+                const replies = await getRepliesFromComment(comment.id);
+                replies.forEach(r => comments.push(r));
+              } else {
+                // <= 5 replies
+                comment.replies.comments.forEach(reply => {
+                  comments.push([
+                    reply.id,                             // comment_id
+                    'reply',                              // type
+                    reply.snippet.parentId,               // parent_id
+                    reply.snippet.authorDisplayName,      // author_display_name
+                    reply.snippet.authorChannelId.value,  // author_id
+                    reply.snippet.likeCount,              // like_count
+                    0,                                    // reply_count (right now YT doesn't have nested replies)
+                    reply.snippet.publishedAt,            // published_at
+                    reply.snippet.updatedAt,              // updated_at
+                    reply.snippet.textDisplay,            // comment
+                  ]);
+                });
+              }
             }
-          });
+          }));
         }
-        updateLog(`Found ${comments.length} comments for ${vidName}.`);
+        updateLog(`${comments.length} comments for ${id}`);
       } catch (err) {
         alert(err);
         updateLog(err);
       }
     } while (nextToken);
+    updateLog(`${comments.length} total comments/replies found for ${id}`);
     return comments;
   }
 
@@ -186,46 +239,44 @@ function App() {
       alert("Missing API Key or Playlist ID");
       return;
     }
-    const [vids, ids] = await getVideosFromPlaylist(playlistID);
-    console.log(vids);
+    const [, ids] = await getVideosFromPlaylist(playlistID);
     setVideoIds(ids);
   }
 
   /**
-   * Fetch all top level comments from given video ID
+   * Fetch all comments from video IDs
+   * 
+   * @param {String[]} ids
+   * @returns {null}
    */
   async function downloadSelected(ids) {
-    setOutputData(null);
-    let jsonblock = [];
+    const zip = new JSZip();
+    let csvdata = [];
+    downloadRef.current.download = '';
+    updateLog("Generating zip to download");
+
     for (const id of ids) {
       const output = await getCommentsFromVideo(id);
-      jsonblock = [...jsonblock, ['comment_id', 'type', 'parent_id', 'author_display_name', 'author_id', 'like_count', 'reply_count', 'published_at', 'updated_at', 'comment'], output];
-    }
-    setOutputData(jsonblock); 
-    updateLog("Done!");
-  }
+      csvdata = [['comment_id', 'type', 'parent_id', 'author_display_name', 'author_id', 'like_count', 'reply_count', 'published_at', 'updated_at', 'comment'], ...output];
 
-  /**
-   * Generates and downloads the csv
-   */
-  function generateDownloadCSV() {
-    if (outputData) {
+      // create csv file and add it to zip
       let csvContent = [];
-      outputData.forEach(row => {
-        csvContent.push(row.join(','));
-      });
+      csvdata.forEach(row => csvContent.push(row.join(',')));
       const csvString = csvContent.join('\n');
-      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8,'});
-      const objUrl = URL.createObjectURL(blob);
-      
-      downloadRef.current.href = objUrl;
-      downloadRef.current.download = 'file.csv';
-      downloadRef.current.click();
-
-      updateLog("Generated CSV.");
-    } else {
-      alert("No output data found");
+      const vidName = videos.find(x => x.id === id).snippet.title.replaceAll(/[<>:/\\|?*"]/g, "");
+      zip.file(`${vidName}_${id}.csv`, csvString);
+      updateLog(`Saved comments into "${vidName}_${id}.csv"`);
     }
+    
+    // send the download to user
+    const blob = await zip.generateAsync({type:"blob"});
+    const objUrl = URL.createObjectURL(blob);
+    
+    downloadRef.current.href = objUrl;
+    downloadRef.current.download = 'comments.zip';
+    downloadRef.current.click();
+    
+    updateLog("Done!");
   }
 
   return (
@@ -256,8 +307,7 @@ function App() {
           <Log content={log}/>
           <div className="action-button-container">
             <button onClick={handleFetchVids}>Fetch Video Information</button>
-            <button className={videoIds.length > 0 ? '' : 'disabled'} onClick={() => {downloadSelected(videoIds)}}>Fetch Comments From Selected Videos</button>
-            <button className={outputData ? '' : 'disabled'} onClick={generateDownloadCSV}>Download Comments</button>
+            <button className={videoIds.length > 0 ? '' : 'disabled'} onClick={() => {downloadSelected(videoIds)}}>Fetch & Download Comments</button>
             <div className={downloadRef.current && downloadRef.current.download ? '' : 'hidden'}>
               Download didn't start? <a href="." ref={downloadRef}>Manual Link</a>
             </div>

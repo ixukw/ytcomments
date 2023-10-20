@@ -17,7 +17,7 @@ function VideoList({ videos }) {
                 <input type="checkbox" id={vid.id} value={vid.id} defaultChecked="true"/>
                 <div>
                     <label htmlFor={vid.id}><strong>{vid.snippet.title}</strong></label>
-                    <p>{vid.statistics ? vid.statistics.commentCount : 0} comments</p>
+                    <p>{vid.statistics ? vid.statistics.commentCount : 0} comments (id: {vid.id})</p>
                 </div>
             </div>)}
         </div>

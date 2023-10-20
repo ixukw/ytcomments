@@ -40,11 +40,11 @@ function Help() {
                         View the GitHub repo <a href="https://github.com/ixukw/ytcomments">here</a>.
                     </p>
                     
-                    <h3>API Quota</h3>
+                    <h3>Limitations</h3>
                     <p>
-                        Google Cloud Free Tier has a daily quota limit of 10,000 requests.
-                        
-                        At 10,000 requests, please wait a day and try again.
+                        Google Cloud Free Tier has a daily quota limit of 10,000 requests. At 10,000 requests, try again in 1 day. <br/>
+
+                        For videos with 1M+ comments the API may not return all comments due to a hard limitation set by Google. <br/>
                     </p>
                     </div>
             </div>
