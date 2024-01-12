@@ -9,9 +9,10 @@ import logReducer from './logReducer.js';
 function App() {
   const [playlistID, setPlaylistID] = useState(null);
   const [apiKey, setAPIKey] = useState(null);
-  const [videos, setVideos] = useState([]);
-  const [videoIds, setVideoIds] = useState([]);
-  const [log, dispatch] = useReducer(logReducer, []);
+  const [videos, setVideos] = useState([]); // detailed info for each video in playlist (name, channel, etc.)
+  const [videoIds, setVideoIds] = useState([]); // id for all videos in playlist
+  const [selectedVids, setSelectedVids] = useState([]); // videos that the user selected in format {'videoid':false, ...}
+  const [log, dispatch] = useReducer(logReducer, []); // logging information
   const downloadRef = useRef();
 
   /**
@@ -110,6 +111,12 @@ function App() {
     return videoStats;
   }
   
+  /**
+   * Get all replies from comment
+   * 
+   * @param {String} id 
+   * @returns {Object[]} Object array of comments
+   */
   async function getRepliesFromComment(id) {
     let comments = [];
     let nextToken = "";
@@ -241,6 +248,10 @@ function App() {
     }
     const [, ids] = await getVideosFromPlaylist(playlistID);
     setVideoIds(ids);
+
+    let s = {}
+    ids.forEach(x => s[x] = true)
+    setSelectedVids(s)
   }
 
   /**
@@ -250,11 +261,17 @@ function App() {
    * @returns {null}
    */
   async function downloadSelected(ids) {
+    console.log(ids)
+    if (ids.length < 1) {
+      alert('Select at least one video');
+      return;
+    }
+
     const zip = new JSZip();
     let csvdata = [];
     downloadRef.current.download = '';
-    updateLog("Generating zip to download");
 
+    updateLog(`Downloading ${ids.length} selected videos.`)
     for (const id of ids) {
       const output = await getCommentsFromVideo(id);
       csvdata = [['comment_id', 'type', 'parent_id', 'author_display_name', 'author_id', 'like_count', 'reply_count', 'published_at', 'updated_at', 'comment'], ...output];
@@ -276,7 +293,7 @@ function App() {
     downloadRef.current.download = 'comments.zip';
     downloadRef.current.click();
     
-    updateLog("Done!");
+    updateLog('Done!');
   }
 
   return (
@@ -289,7 +306,10 @@ function App() {
       <div className="main-content">
         <div className="left-column-container">
           <div>
-            Playlist URL: <input type="text" onChange={(e) => {setPlaylistID(e.target.value.substring(e.target.value.indexOf('?list=')+6))}} placeholder="URL" spellCheck="false"/>
+            Playlist URL: <input type="text" onChange={(e) => {
+              let url = new URL(e.target.value)
+              setPlaylistID(url.searchParams.get('list'))
+            }} placeholder="URL" spellCheck="false"/>
           </div>
           <div>
             API Key: <input type="password" onChange={(e) => {setAPIKey(e.target.value)}} placeholder="API Key" spellCheck="false"/>
@@ -299,7 +319,7 @@ function App() {
             <div className="video-list-header">
               <h3>Found {videos.length} Videos.</h3>
             </div>
-            <VideoList videos={videos} />
+            <VideoList videos={videos} selectedVids={selectedVids} setSelectedVids={setSelectedVids}/>
           </div>}
         </div>
       
@@ -307,7 +327,13 @@ function App() {
           <Log content={log}/>
           <div className="action-button-container">
             <button onClick={handleFetchVids}>Fetch Video Information</button>
-            <button className={videoIds.length > 0 ? '' : 'disabled'} onClick={() => {downloadSelected(videoIds)}}>Fetch & Download Comments</button>
+            <button className={videoIds.length > 0 ? '' : 'disabled'} onClick={() => {
+              let ids = []
+              for (const [k,v] of Object.entries(selectedVids)) {
+                if (v) ids.push(k)
+              }
+              downloadSelected(ids)}
+            }>Fetch & Download Comments</button>
             <div className={downloadRef.current && downloadRef.current.download ? '' : 'hidden'}>
               Download didn't start? <a href="." ref={downloadRef}>Manual Link</a>
             </div>
