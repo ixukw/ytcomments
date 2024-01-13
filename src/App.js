@@ -20,15 +20,27 @@ function App() {
    * 
    * @param {String} text 
    */
-  function updateLog(text) {
-    dispatch({
-      type: 'add',
-      text: text
-    });
+  function updateLog(text, type='log') {
+    switch (type)  {
+      case 'error':
+        dispatch({
+          type: 'add',
+          text: `!!! ${text.name}: ${text.message}.`
+        });
+        break;
+      case 'log':
+        dispatch({
+          type: 'add',
+          text: text
+        });
+        break;
+      default:
+        break;
+    }
+    console.log(text);
   } 
 
   /**
-   * 
    * Fetches all video information from the playlist.
    * 
    * @param {String} id 
@@ -62,15 +74,11 @@ function App() {
           });
           videoIds.push(video.snippet.resourceId.videoId);
         });
-        console.log(videoIds);
 
         // Handle query again if exists
         if (!data.nextPageToken) break;
         nextToken = data.nextPageToken;
-      } catch (err) {
-        alert(err);
-        console.log(err);
-      }
+      } catch (e) { updateLog(e, 'error'); }
     } while (nextToken);
 
     // Get comment count of each video
@@ -83,30 +91,32 @@ function App() {
   }
 
   /**
-   * 
    * Fetches video information from a set of video IDs
    * 
    * @param {String[]} ids 
-   * @returns {Object[]} An Object array of video informations
+   * @returns {Object[]} Object array of video properties
    */
   async function getStatsFromVideoIds(ids) {
     let nextToken = "";
     let videoStats = [];
-    for (let c = 0; c * 50 < ids.length; c++) { // maximum results per query is 50, in the case of more than 50 ids this will fetch them all
-      do {
-        const response = await fetch('https://youtube.googleapis.com/youtube/v3/videos?' + new URLSearchParams({
-          key: apiKey,
-          id: ids.slice(c * 50, 50 * (c+1)),
-          part: 'statistics',
-          pageToken: nextToken
-        }));
 
-        const data = await response.json();
-        data.items.forEach(v => videoStats.push(v));
+    // maximum results per query is 50, if ids > 50 this will fetch all
+    for (let c = 0; c * 50 < ids.length; c++) {
+      try {
+        do {
+          const response = await fetch('https://youtube.googleapis.com/youtube/v3/videos?' + new URLSearchParams({
+            key: apiKey,
+            id: ids.slice(c * 50, 50 * (c+1)),
+            part: 'statistics',
+            pageToken: nextToken
+          }));
+          const data = await response.json();
+          data.items.forEach(v => videoStats.push(v));
 
-        if (!data.nextPageToken) break;
-        nextToken = data.nextPageToken;
-      } while (nextToken);
+          if (!data.nextPageToken) break;
+          nextToken = data.nextPageToken;
+        } while (nextToken);
+      } catch (e) { updateLog(e, 'error'); }
     }
     return videoStats;
   }
@@ -115,13 +125,13 @@ function App() {
    * Get all replies from comment
    * 
    * @param {String} id 
-   * @returns {Object[]} Object array of comments
+   * @returns {Promise<Object[]>} Object array of comments
    */
   async function getRepliesFromComment(id) {
     let comments = [];
-    let nextToken = "";
-    do {
-      try {
+    let nextToken = '';
+    try {
+      do {
         const response = await fetch('https://www.googleapis.com/youtube/v3/comments?' + new URLSearchParams({
           key: apiKey,
           parentId: id,
@@ -129,33 +139,29 @@ function App() {
           pageToken: nextToken,
           maxResults: 100
         }));
-
         const data = await response.json();
         nextToken = data.nextPageToken;
 
         if (data.items) {
           await Promise.all(data.items.map(async reply => {
+            let r = reply.snippet;
             comments.push([
-              reply.id,                             // comment_id
-              'reply',                              // type
-              reply.snippet.parentId,               // parent_id
-              reply.snippet.authorDisplayName,      // author_display_name
-              reply.snippet.authorChannelId.value,  // author_id
-              reply.snippet.likeCount,              // like_count
-              0,                                    // reply_count (right now YT doesn't have nested replies)
-              reply.snippet.publishedAt,            // published_at
-              reply.snippet.updatedAt,              // updated_at
-              reply.snippet.textDisplay,            // comment
+              reply.id,                                          // comment_id
+              'reply',                                           // type
+              r.parentId,                                        // parent_id
+              r.authorDisplayName,                               // author_display_name
+              r.authorChannelId ? r.authorChannelId.value : '',  // author_id
+              r.likeCount,                                       // like_count
+              0,                                                 // reply_count (no nested replies on YT rn)
+              r.publishedAt,                                     // published_at
+              r.updatedAt,                                       // updated_at
+              r.textDisplay,                                     // comment
             ]);
           }));
         }
-      } catch (err) {
-        alert(err);
-        updateLog(err);
-      }
-    } while (nextToken);
-
-    updateLog(`${comments.length} total replies for comment ${id}`);
+      } while (nextToken);
+    } catch (e) { updateLog(e, 'error'); updateLog(`Stopping replies from comment ${id} early due to error!`); }
+    //updateLog(`${comments.length} replies fetched`);
     return comments;
   }
 
@@ -171,10 +177,10 @@ function App() {
     let comments = [];
     let nextToken = "";
     const vidName = videos.find(x => x.id === id).snippet.title;
-    updateLog(`Begin fetch for "${vidName}"`);
+    updateLog(`Starting "${vidName}"`);
 
-    do {
-      try {
+    try {
+      do {
         const response = await fetch('https://www.googleapis.com/youtube/v3/commentThreads?' + new URLSearchParams({
           key: apiKey,
           videoId: id,
@@ -186,55 +192,51 @@ function App() {
         const data = await response.json();
         nextToken = data.nextPageToken;
         
-        console.log(data);
         if (data.items) {
           await Promise.all(data.items.map(async comment => {
             // top-level comment
+            let c = comment.snippet.topLevelComment.snippet;
             comments.push([
-              comment.id,                                                     // comment_id
-              'commentThread',                                                // type
-              'N/A',                                                          // parent_id
-              comment.snippet.topLevelComment.snippet.authorDisplayName,      // author_display_name
-              comment.snippet.topLevelComment.snippet.authorChannelId.value,  // author_id
-              comment.snippet.topLevelComment.snippet.likeCount,              // like_count
-              comment.snippet.totalReplyCount,                                // reply_count
-              comment.snippet.topLevelComment.snippet.publishedAt,            // published_at
-              comment.snippet.topLevelComment.snippet.updatedAt,              // updated_at
-              comment.snippet.topLevelComment.snippet.textDisplay,            // comment
+              comment.id,                                        // comment_id
+              'commentThread',                                   // type
+              'N/A',                                             // parent_id
+              c.authorDisplayName,                               // author_display_name
+              c.authorChannelId ? c.authorChannelId.value : '',  // author_id
+              c.likeCount,                                       // like_count
+              comment.snippet.totalReplyCount,                   // reply_count
+              c.publishedAt,                                     // published_at
+              c.updatedAt,                                       // updated_at
+              c.textDisplay,                                     // comment
             ]);
-
-            // reply comment - only refetch for comments with >5 replies to conserve api calls
+            // only refetch replies if replies > 5 to reduce api calls
             if (comment.replies) {
               if (comment.snippet.totalReplyCount > 5) {
                 const replies = await getRepliesFromComment(comment.id);
                 replies.forEach(r => comments.push(r));
               } else {
-                // <= 5 replies
                 comment.replies.comments.forEach(reply => {
+                  let r = reply.snippet;
                   comments.push([
-                    reply.id,                             // comment_id
-                    'reply',                              // type
-                    reply.snippet.parentId,               // parent_id
-                    reply.snippet.authorDisplayName,      // author_display_name
-                    reply.snippet.authorChannelId.value,  // author_id
-                    reply.snippet.likeCount,              // like_count
-                    0,                                    // reply_count (right now YT doesn't have nested replies)
-                    reply.snippet.publishedAt,            // published_at
-                    reply.snippet.updatedAt,              // updated_at
-                    reply.snippet.textDisplay,            // comment
+                    reply.id,                                           // comment_id
+                    'reply',                                            // type
+                    r.parentId,                                         // parent_id
+                    r.authorDisplayName,                                // author_display_name
+                    r.authorChannelId ? r.authorChannelId.value : '',   // author_id
+                    r.likeCount,                                        // like_count
+                    0,                                                  // reply_count (right now YT doesn't have nested replies)
+                    r.publishedAt,                                      // published_at
+                    r.updatedAt,                                        // updated_at
+                    r.textDisplay,                                      // comment
                   ]);
                 });
               }
             }
           }));
         }
-        updateLog(`${comments.length} comments for ${id}`);
-      } catch (err) {
-        alert(err);
-        updateLog(err);
-      }
-    } while (nextToken);
-    updateLog(`${comments.length} total comments/replies found for ${id}`);
+        updateLog(`${comments.length} comments (${id})`);
+      } while (nextToken);
+    } catch (e) { updateLog(e, 'error'); updateLog(`Stopping video ${id} early due to error!`)}
+    updateLog(`${comments.length} total for ${id}`);
     return comments;
   }
 
@@ -282,7 +284,7 @@ function App() {
       const csvString = csvContent.join('\n');
       const vidName = videos.find(x => x.id === id).snippet.title.replaceAll(/[<>:/\\|?*"]/g, "");
       zip.file(`${vidName}_${id}.csv`, csvString);
-      updateLog(`Saved comments into "${vidName}_${id}.csv"`);
+      updateLog(`Saved as "${vidName}_${id}.csv"`);
     }
     
     // send the download to user
